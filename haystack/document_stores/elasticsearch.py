@@ -345,7 +345,9 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
                             f" with the type '{mapping['properties'][self.embedding_field]['type']}'. Please update the "
                             f"document_store to use a different name for the embedding_field parameter."
                         )
-                    mapping["properties"][self.embedding_field] = {"type": "dense_vector", "dims": self.embedding_dim}
+                    #mapping["properties"][self.embedding_field] = {"type": "dense_vector", "dims": self.embedding_dim}
+                    mapping["properties"][self.embedding_field] = {"type": "dense_vector"}
+
                     self.client.indices.put_mapping(index=index_id, body=mapping, headers=headers)
             return
 
@@ -381,8 +383,8 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
 
             if self.embedding_field:
                 mapping["mappings"]["properties"][self.embedding_field] = {
-                    "type": "dense_vector",
-                    "dims": self.embedding_dim,
+                    "type": "dense_vector"
+                    #"dims": self.embedding_dim,
                 }
 
         try:
@@ -402,8 +404,8 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
             "mappings": {
                 "properties": {
                     "query": {"type": "text"},
-                    "answer": {"type": "flattened"},  # light-weight but less search options than full object
-                    "document": {"type": "flattened"},
+                    "answer": {"type": "text"},  # light-weight but less search options than full object
+                    "document": {"type": "text"},
                     "is_correct_answer": {"type": "boolean"},
                     "is_correct_document": {"type": "boolean"},
                     "origin": {"type": "keyword"},  # e.g. user-feedback or gold-label
@@ -1584,19 +1586,22 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
                 embeddings = retriever.embed_documents(document_batch)  # type: ignore
                 assert len(document_batch) == len(embeddings)
 
+                print(f"{embeddings[0].shape[0]} {self.embedding_dim}")
+                '''
                 if embeddings[0].shape[0] != self.embedding_dim:
                     raise RuntimeError(
                         f"Embedding dim. of model ({embeddings[0].shape[0]})"
                         f" doesn't match embedding dim. in DocumentStore ({self.embedding_dim})."
                         "Specify the arg `embedding_dim` when initializing ElasticsearchDocumentStore()"
                     )
+                '''
                 doc_updates = []
                 for doc, emb in zip(document_batch, embeddings):
                     update = {
                         "_op_type": "update",
                         "_index": index,
                         "_id": doc.id,
-                        "doc": {self.embedding_field: emb.tolist()},
+                        "doc": {self.embedding_field: emb.tolist()[0:self.embedding_dim]},
                     }
                     doc_updates.append(update)
 
