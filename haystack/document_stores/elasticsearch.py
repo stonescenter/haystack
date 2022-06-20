@@ -66,6 +66,7 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
         synonyms: Optional[List] = None,
         synonym_type: str = "synonym",
         use_system_proxy: bool = False,
+        use_embedding_dim: bool = True,
     ):
         """
         A DocumentStore using Elasticsearch to store and query the documents for our search.
@@ -169,6 +170,7 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
         self.name_field = name_field
         self.embedding_field = embedding_field
         self.embedding_dim = embedding_dim
+        self.use_embedding_dim = use_embedding_dim
         self.excluded_meta_data = excluded_meta_data
         self.analyzer = analyzer
         self.return_embedding = return_embedding
@@ -345,8 +347,10 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
                             f" with the type '{mapping['properties'][self.embedding_field]['type']}'. Please update the "
                             f"document_store to use a different name for the embedding_field parameter."
                         )
-                    #mapping["properties"][self.embedding_field] = {"type": "dense_vector", "dims": self.embedding_dim}
-                    mapping["properties"][self.embedding_field] = {"type": "dense_vector"}
+                    if self.use_embedding_dim:
+                        mapping["properties"][self.embedding_field] = {"type": "dense_vector", "dims": self.embedding_dim}
+                    else:
+                        mapping["properties"][self.embedding_field] = {"type": "dense_vector"}
 
                     self.client.indices.put_mapping(index=index_id, body=mapping, headers=headers)
             return
@@ -382,10 +386,16 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
                     mapping["mappings"]["properties"].update({field: {"type": "text"}})
 
             if self.embedding_field:
-                mapping["mappings"]["properties"][self.embedding_field] = {
-                    "type": "dense_vector"
-                    #"dims": self.embedding_dim,
-                }
+                if self.use_embedding_dim:
+                    mapping["mappings"]["properties"][self.embedding_field] = {
+                        "type": "dense_vector",
+                        "dims": self.embedding_dim
+                    }
+                else:
+                    mapping["mappings"]["properties"][self.embedding_field] = {
+                        "type": "dense_vector"
+                    }
+
 
         try:
             self.client.indices.create(index=index_name, body=mapping, headers=headers)
@@ -1586,22 +1596,23 @@ class ElasticsearchDocumentStore(KeywordDocumentStore):
                 embeddings = retriever.embed_documents(document_batch)  # type: ignore
                 assert len(document_batch) == len(embeddings)
 
-                print(f"{embeddings[0].shape[0]} {self.embedding_dim}")
-                '''
+                #print(f"{embeddings[0].shape[0]} {self.embedding_dim}")
+                
                 if embeddings[0].shape[0] != self.embedding_dim:
                     raise RuntimeError(
                         f"Embedding dim. of model ({embeddings[0].shape[0]})"
                         f" doesn't match embedding dim. in DocumentStore ({self.embedding_dim})."
                         "Specify the arg `embedding_dim` when initializing ElasticsearchDocumentStore()"
                     )
-                '''
+                
                 doc_updates = []
                 for doc, emb in zip(document_batch, embeddings):
                     update = {
                         "_op_type": "update",
                         "_index": index,
                         "_id": doc.id,
-                        "doc": {self.embedding_field: emb.tolist()[0:self.embedding_dim]},
+                        #"doc": {self.embedding_field: emb.tolist()[0:self.embedding_dim]},
+                        "doc": {self.embedding_field: emb.tolist()}
                     }
                     doc_updates.append(update)
 
